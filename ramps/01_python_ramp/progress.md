@@ -19,7 +19,7 @@ stages:
     started: ""
     completed: ""
     estimate: "1–2 days"
-    artifact: "devtool/ folder with package, modules, working import chain"
+    artifact: "agentlog/ folder with package, modules, working import chain"
     notes: ""
 
   02_classes_and_oop:
@@ -27,7 +27,7 @@ stages:
     started: ""
     completed: ""
     estimate: "2 days"
-    artifact: "devtool/models.py — Run, RunRegistry, StreamingRun"
+    artifact: "agentlog/models.py — Run, RunRegistry, StreamingRun"
     notes: ""
 
   03_type_hints_pydantic:

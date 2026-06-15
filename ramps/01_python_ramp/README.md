@@ -2,7 +2,23 @@
 
 This is the prerequisite ramp. Every other ramp — agentic, FastAPI, RAG, TypeScript, MCP — assumes the skills built here. LeetCode Python gets you syntax and algorithms. This ramp gets you professional Python: the kind used in frameworks, libraries, and production systems.
 
-The ramp is additive. One codebase grows through all 8 stages. The capstone is a real, installable CLI tool that uses every layer.
+---
+
+## The Project
+
+You build **one thing across all 8 stages**: `agentlog` — a local CLI that runs prompts against an LLM, logs every run, and lets you list, inspect, and replay them from the terminal.
+
+```bash
+agentlog run "Write a haiku about Python"
+agentlog list
+agentlog list --status failed
+agentlog get <run_id>
+agentlog clear
+agentlog config show
+agentlog version
+```
+
+Each stage adds one layer. The LLM call comes last — in Stage 08. Everything before it builds the foundation that makes the LLM call clean and testable.
 
 ---
 
@@ -10,15 +26,53 @@ The ramp is additive. One codebase grows through all 8 stages. The capstone is a
 
 ```yaml
 stages:
-  01_project_structure:    "Python as a professional language — envs, imports, modules"
-  02_classes_and_oop:      "Classes, dataclasses, dunder methods — framework-style OOP"
-  03_type_hints_pydantic:  "Type system + Pydantic — the foundation of FastAPI and LangGraph"
-  04_files_config_env:     "pathlib, os.environ, dotenv, json/yaml — real-world operations"
-  05_errors_and_testing:   "Custom exceptions, pytest — prerequisite for every capstone"
-  06_async_python:         "async/await, asyncio — prerequisite for FastAPI and LangGraph"
-  07_packaging:            "pyproject.toml, pip install -e, publishing — OSS prerequisite"
-  08_capstone:             "Typer CLI that uses all 7 layers — installable, publishable"
+  01_project_structure:
+    builds: "agentlog/ skeleton — venv, package, import chain"
+    concept: "Virtual envs, packages, modules, imports"
+
+  02_classes_and_oop:
+    builds: "agentlog/models.py — Run, RunRegistry, StreamingRun"
+    concept: "Classes, dataclasses, dunder methods, inheritance, properties"
+
+  03_type_hints_pydantic:
+    builds: "Rewrite models.py with Pydantic — validation, serialization, schema"
+    concept: "Type hints, BaseModel, Field validators, nested models, model_dump()"
+
+  04_files_config_env:
+    builds: "agentlog/config.py + agentlog/storage.py — runs persist to disk"
+    concept: "pathlib, BaseSettings, json, yaml, context managers"
+
+  05_errors_and_testing:
+    builds: "agentlog/errors.py + tests/ — explicit failures, full test suite"
+    concept: "Exception hierarchy, pytest fixtures, parametrize, tmp_path, coverage"
+
+  06_async_python:
+    builds: "agentlog/runner.py — async RunRunner, concurrent batch execution"
+    concept: "Event loop, async/await, asyncio.gather(), blocking vs non-blocking"
+
+  07_packaging:
+    builds: "pyproject.toml — installable package, agentlog terminal command"
+    concept: "pyproject.toml, editable install, entry points, build + publish"
+
+  08_capstone:
+    builds: "agentlog/cli.py — full CLI wired to everything, real OpenAI calls"
+    concept: "Synthesis — all 7 layers working together"
 ```
+
+---
+
+## The thread
+
+Every step is motivated by the project, not by the concept list.
+
+- Stage 01: agentlog needs a home → structure
+- Stage 02: runs need to be represented → classes
+- Stage 03: runs need validation → Pydantic
+- Stage 04: runs need to persist → files and config
+- Stage 05: things break; you need to know when → errors and tests
+- Stage 06: LLM calls are slow; run them in parallel → async
+- Stage 07: you want to install it properly → packaging
+- Stage 08: wire everything into a tool you actually use → capstone
 
 ---
 
@@ -39,25 +93,24 @@ unlocks:
 
 ```yaml
 done_when:
-  - You can set up a Python project with a virtual env and install dependencies
-  - You can write a class with type hints, __init__, properties, and dunder methods
-  - You can define and validate data with Pydantic BaseModel
-  - You can read/write files, load .env config, and handle paths with pathlib
-  - You can write pytest tests that pass and fail correctly
-  - You understand async def and can write a simple async function
-  - You can package a Python project and install it locally with pip install -e .
-  - You have a working CLI tool as the capstone artifact
+  - agentlog run "hello" makes a real OpenAI call and stores the result
+  - agentlog list shows all runs in a Rich table with colored status
+  - pytest tests/ passes with >80% coverage on core modules
+  - pip install -e . works cleanly
+  - You can trace a single agentlog run call through the entire codebase
+    from CLI → runner → storage → models → disk → back
+  - You can read a LangGraph or FastAPI source file and understand every class, decorator, and pattern
 ```
 
 ---
 
-## Approach
+## Rules
 
 ```yaml
 rules:
-  - Additive — one codebase, one folder, grows through all stages
+  - One codebase, one project — grows through all 8 stages
   - Every stage produces runnable code — not just reading exercises
-  - You come from C#/.NET — the concepts are familiar, only the syntax is new
-  - No data science, no numpy, no ML — that's a different track
-  - Use Python 3.12 throughout
+  - You come from C#/.NET — concepts are familiar, only syntax is new
+  - No data science, no numpy, no ML — different track
+  - Python 3.12 throughout
 ```
