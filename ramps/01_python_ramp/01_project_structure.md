@@ -2,20 +2,26 @@
 
 **Status:** not started
 **Estimated time:** 1–2 days
-**Type:** additive start — this folder grows through all 8 stages
+**Type:** foundation — this folder grows through all 8 stages
 **Depends on:** basic Python syntax (you have this from LeetCode)
-
-LeetCode Python runs in a single function in a single file. Real Python projects have structure: a virtual environment that isolates dependencies, a package that can be imported, modules that separate concerns, and a clear boundary between "my code" and "installed libraries." This stage builds that foundation.
 
 ---
 
-## What You're Building
+## The Project
 
-A project folder called `devtool/` that will grow through all 8 stages. By the end of this stage it has:
-- A virtual environment
-- One Python package (`devtool/`)
-- Two modules inside it
-- A working import chain you can run from the terminal
+You're going to build **`agentlog`** — a local CLI that runs prompts against an LLM, logs every run, and lets you list, inspect, and replay them from the terminal. By Stage 08 it's a real installable tool you'd actually use while building agents.
+
+This stage doesn't touch LLMs yet. It builds the house the project will live in. Every other stage adds a floor.
+
+By the end of this stage you have a working project skeleton with a virtual environment, a package you can import, and a confirmed import chain. Small, but real.
+
+---
+
+## Why this stage exists
+
+LeetCode Python runs in a single function in a single file. The judge handles everything else. Real Python projects have structure: a virtual environment that isolates dependencies, a package that can be imported, modules that separate concerns, and a clear boundary between "my code" and "installed libraries."
+
+When you eventually add LLM calls, Pydantic models, async runners, and a CLI — they all need to live somewhere that imports cleanly. That somewhere is what you're building now.
 
 ---
 
@@ -40,7 +46,7 @@ concepts:
     what: >
       A module is a single .py file.
       A package is a folder containing an __init__.py file — it can be imported.
-      devtool/utils.py is a module. devtool/ (with __init__.py) is a package.
+      agentlog/utils.py is a module. agentlog/ (with __init__.py) is a package.
     why: >
       Every library you install (langchain, fastapi, pydantic) is a package.
       When you write from langchain_core.messages import HumanMessage, you're
@@ -56,7 +62,7 @@ concepts:
 
   Absolute vs relative imports:
     what: >
-      Absolute: from devtool.utils import format_message   (full path from project root)
+      Absolute: from agentlog.utils import format_message   (full path from project root)
       Relative: from .utils import format_message           (relative to current file)
     why: >
       Absolute imports are preferred — they work regardless of where you run the script from.
@@ -85,14 +91,12 @@ concepts:
 ## Project Setup
 
 ```bash
-mkdir devtool
-cd devtool
+mkdir agentlog
+cd agentlog
 
-# Create virtual environment
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-# Confirm
 which python   # should show .venv/bin/python
 python --version   # should show 3.12.x
 ```
@@ -101,26 +105,35 @@ python --version   # should show 3.12.x
 
 ## Build Steps
 
+The goal of this stage: get to `python main.py` printing real output, with a clean import chain across multiple modules. Every step adds one piece.
+
 ```yaml
 steps:
   1:
-    task: "Create the project structure"
+    task: "Create the skeleton"
+    why: >
+      agentlog needs a home. The package folder is where all future modules live —
+      models, config, runner, storage, CLI. Create the structure now so imports work
+      from day one.
     detail: >
-      devtool/               ← project root
+      agentlog/               ← project root
       ├── .venv/             ← virtual environment (git-ignored)
-      ├── devtool/           ← the Python package
+      ├── agentlog/           ← the Python package
       │   ├── __init__.py    ← makes this a package
       │   ├── models.py      ← data structures (grows in Stage 02-03)
       │   └── utils.py       ← utility functions
       └── main.py            ← entry point script
 
-      Create all files now, even if empty.
-      touch devtool/__init__.py devtool/models.py devtool/utils.py main.py
+      touch agentlog/__init__.py agentlog/models.py agentlog/utils.py main.py
 
   2:
     task: "Write something in utils.py"
+    why: >
+      agentlog needs to display run summaries in the terminal. A format_list() utility
+      will be used in every stage that prints output. Write it now so the import chain
+      has something real to exercise.
     detail: >
-      # devtool/utils.py
+      # agentlog/utils.py
 
       def greet(name: str) -> str:
           return f"Hello, {name}!"
@@ -130,34 +143,40 @@ steps:
               return "(empty)"
           return "\n".join(f"  - {item}" for item in items)
 
-      Note the type hints — name: str, -> str. Not required yet but start the habit now.
+      Note the type hints — name: str, -> str. Not enforced yet but start the habit now.
+      Every function in this project will have them.
 
   3:
-    task: "Write something in __init__.py"
+    task: "Wire __init__.py"
+    why: >
+      You want to write `from agentlog import greet` in other modules, not
+      `from agentlog.utils import greet`. __init__.py is where you control
+      what the package exposes at the top level.
     detail: >
-      # devtool/__init__.py
+      # agentlog/__init__.py
 
-      # This file marks devtool/ as a package.
-      # You can import things here to make them available at the package level.
-
-      from devtool.utils import greet
+      from agentlog.utils import greet
 
       # Now both of these work:
-      #   from devtool.utils import greet      (module-level import)
-      #   from devtool import greet            (package-level import via __init__)
+      #   from agentlog.utils import greet      (module-level import)
+      #   from agentlog import greet            (package-level import via __init__)
 
   4:
     task: "Write main.py with the __main__ guard"
+    why: >
+      main.py is the entry point for the whole project right now. Later it becomes
+      a CLI, but for this stage it's a simple script that confirms imports work.
+      The __main__ guard ensures this file can also be imported safely.
     detail: >
       # main.py
 
-      from devtool.utils import greet, format_list
-      from devtool import greet as greet_short   # same function, imported differently
+      from agentlog.utils import greet, format_list
+      from agentlog import greet as greet_short
 
       def run():
-          print(greet("world"))
-          print(greet_short("world"))
-          print(format_list(["agentic ramp", "fastapi ramp", "rag ramp"]))
+          print(greet("agentlog"))
+          print(greet_short("agentlog"))
+          print(format_list(["run a prompt", "log it", "inspect it", "replay it"]))
 
       if __name__ == "__main__":
           run()
@@ -165,49 +184,57 @@ steps:
   5:
     task: "Run it"
     detail: >
-      # From the project root (devtool/)
       python main.py
 
       You should see:
-        Hello, world!
-        Hello, world!
-          - agentic ramp
-          - fastapi ramp
-          - rag ramp
+        Hello, agentlog!
+        Hello, agentlog!
+          - run a prompt
+          - log it
+          - inspect it
+          - replay it
+
+      This confirms: venv is active, package is importable, import chain works.
 
   6:
-    task: "Add a second module and import between modules"
+    task: "Add a constants module"
+    why: >
+      agentlog will need a version number and an app name in multiple places —
+      the CLI header, the storage file, the package metadata. One module,
+      imported everywhere. Add it now and practice cross-module imports.
     detail: >
-      Create devtool/constants.py:
-        VERSION = "0.1.0"
-        APP_NAME = "devtool"
+      # agentlog/constants.py
+      VERSION = "0.1.0"
+      APP_NAME = "agentlog"
 
-      Import it in utils.py:
-        from devtool.constants import APP_NAME
+      # agentlog/utils.py — add:
+      from agentlog.constants import APP_NAME
 
-        def get_banner() -> str:
-            return f"=== {APP_NAME} ==="
+      def get_banner() -> str:
+          return f"=== {APP_NAME} ==="
 
-      Import get_banner in main.py and call it.
-      This exercises the inter-module import pattern you'll use constantly.
+      # main.py — add:
+      from agentlog.utils import get_banner
+      print(get_banner())
 
   7:
     task: "Break imports deliberately"
+    why: >
+      You'll hit import errors constantly while building the rest of this project.
+      Trigger them on purpose now so you recognize them on sight.
     detail: >
-      - Delete __init__.py and try to run main.py. What error? Restore it.
-      - Change "from devtool.utils import greet" to "from utils import greet".
-        Run from the project root. What error? Run from inside devtool/. Different result?
-        This teaches you why absolute imports and running from the project root matter.
+      - Delete __init__.py and run main.py. What error? Restore it.
+      - Change "from agentlog.utils import greet" to "from utils import greet".
+        Run from project root. What error? Run from inside agentlog/. Different result?
+        This shows why absolute imports and running from the project root matter.
       - Add print("utils loaded") at the top of utils.py (outside any function).
-        Import utils from main.py. Does it print? When?
-        This teaches the side-effect-at-import problem.
+        Import utils from main.py. Does it print? When does it run?
+        This is the side-effect-at-import problem you'll avoid in all future modules.
 ```
 
 ---
 
 ## .gitignore
-
-Create this now — you'll need it throughout:
 
 ```
 .venv/
@@ -219,6 +246,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+.agentlog_data/
 ```
 
 ---
@@ -230,8 +258,8 @@ done_when:
   - python main.py runs and prints correct output
   - You can explain the difference between a module and a package in one sentence
   - You understand what __init__.py does and what happens without it
-  - You can add a new module, add a function to it, and import it correctly
-  - You know what "ModuleNotFoundError" means and how to fix it
+  - You can add a new module, write a function in it, and import it correctly
+  - You know what ModuleNotFoundError means and how to fix it
   - You can explain why if __name__ == "__main__" exists
 ```
 
@@ -255,9 +283,9 @@ if_you_know_csharp:
 ```yaml
 open_questions:
   - What is the difference between pip install and pip install -e .?
-    (You'll answer this properly in Stage 07 — note it for now)
-  - What does from devtool import * do? Why is it usually a bad idea?
+    (You'll answer this in Stage 07)
+  - What does from agentlog import * do? Why is it usually a bad idea?
   - What happens if two modules import each other (circular imports)?
-    Can you trigger this deliberately and read the error?
+    Trigger it deliberately and read the error.
   - What is __all__ in __init__.py and when would you use it?
 ```
