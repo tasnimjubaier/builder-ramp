@@ -2,16 +2,22 @@
 
 **Status:** not started
 **Estimated time:** 2 days
-**Type:** additive — add tests/ to devtool/
+**Type:** additive — add agentlog/errors.py and tests/
 **Depends on:** Stage 04 (models, config, storage all built)
-
-Two things that separate scripts from professional code: deliberate error handling and automated tests. Python's exception system is richer than C#'s — you can define exception hierarchies, catch multiple types, and add context. pytest is the standard test runner — cleaner than unittest, with fixtures and parametrize built in. Every capstone in every ramp depends on pytest.
 
 ---
 
-## What You're Building
+## The Story So Far
 
-Add `devtool/errors.py` — a custom exception hierarchy for devtool. Add `tests/` — a test suite for the models, storage, and config you've built. By the end, `pytest tests/` passes and you have real test coverage on your codebase.
+agentlog can create runs, validate them, save them, and load them back. But what happens when something goes wrong? Right now, `RunRegistry.get()` returns `None` for a missing run — and whoever calls it has to remember to check. `FileStorage.load()` will crash with a raw `json.JSONDecodeError` if the file is corrupted. These aren't edge cases — they're things that will happen the first time you run agentlog against real data.
+
+This stage does two things: adds a proper error hierarchy so failures are explicit and informative, and adds a test suite so you know the code actually works before you wire it to a CLI and an LLM.
+
+---
+
+## Why this stage exists
+
+Two things separate scripts from professional code: deliberate error handling and automated tests. Python's exception system lets you define hierarchies — catch a broad class or a specific one. pytest is the standard test runner — cleaner than unittest, with fixtures and parametrize built in. Every capstone in every ramp depends on pytest. You can't build reliable async agents without knowing how to test them.
 
 ---
 
@@ -21,34 +27,33 @@ Add `devtool/errors.py` — a custom exception hierarchy for devtool. Add `tests
 concepts:
   Exception hierarchy:
     what: >
-      Python exceptions are classes. You define custom ones by inheriting from Exception.
-      You can create a hierarchy: AppError → RunError → RunNotFoundError.
-      Catching AppError catches all subclasses.
+      Python exceptions are classes. Custom ones inherit from Exception.
+      You can create a hierarchy: DevToolError → RunError → RunNotFoundError.
+      Catching DevToolError catches all subclasses.
     why: >
-      Custom exceptions let callers catch specific error types and handle them differently.
+      Custom exceptions let callers handle specific failures differently.
       raise RunNotFoundError("r1") is more informative than raise ValueError("not found").
       FastAPI's HTTPException is just a custom exception class — understanding this
       demystifies how error handlers work.
 
-  raise, raise from, and re-raise:
+  raise, raise from, re-raise:
     what: >
-      raise MyError("message")          — raise a new exception
-      raise MyError("msg") from original — chain to the original cause (shows both in traceback)
-      raise                             — re-raise the current exception (inside except block)
+      raise MyError("message")           — raise a new exception
+      raise MyError("msg") from original — chain to the original cause
+      raise                              — re-raise inside an except block
     why: >
-      raise ... from ... preserves the original error context in the traceback.
-      This is how you wrap low-level exceptions (json.JSONDecodeError) in meaningful
-      application errors (StorageCorruptedError) without losing the root cause.
+      raise ... from ... preserves the original error in the traceback.
+      This is how you wrap a low-level json.JSONDecodeError in a meaningful
+      StorageCorruptedError without losing the root cause.
 
   try / except / else / finally:
     what: >
       try: risky code
       except SomeError as e: handle it
-      else: runs if no exception was raised
-      finally: always runs — cleanup code
+      else: runs only if no exception was raised
+      finally: always runs — cleanup
     why: >
-      else is underused but valuable — it's the "happy path" code that only runs
-      when no exception occurred, keeping it separate from exception handling.
+      else is the "happy path" that only runs when no exception occurred.
       finally is how you close resources when you can't use with.
 
   pytest basics:
@@ -58,32 +63,31 @@ concepts:
       pytest.raises(ExceptionType) — assert that code raises a specific exception.
     why: >
       This is the testing pattern used in every OSS project you'll read or contribute to.
-      The assert rewriting is why pytest's output is so clear — you see actual vs expected.
+      The assert rewriting is why pytest's output is so clear — actual vs expected, not just "False".
 
   pytest fixtures:
     what: >
       A function decorated with @pytest.fixture that provides a resource to tests.
-      Tests declare the fixture as a parameter — pytest injects it.
+      Tests declare the fixture as a parameter — pytest injects it automatically.
     why: >
       Fixtures replace setUp/tearDown. They're more composable and explicit.
-      A storage fixture creates a temp FileStorage. Every test that needs storage
-      gets a fresh one automatically.
+      A storage fixture creates a fresh FileStorage in a temp dir.
+      Every test that needs storage gets a clean one without any setup code.
 
   pytest.mark.parametrize:
     what: >
       Run the same test with multiple inputs:
       @pytest.mark.parametrize("status", ["pending", "running", "done", "failed"])
-      def test_valid_status(status): ...
     why: >
-      One test function, four test cases. Better than copy-pasting the same test four times.
+      One test function, four test cases. Better than copy-pasting the same assertion.
       Used in every serious test suite.
 
   tmp_path fixture:
     what: >
-      A built-in pytest fixture that provides a temporary directory that's cleaned up after each test.
+      A built-in pytest fixture — provides a temporary directory cleaned up after each test.
     why: >
-      File-based tests (like FileStorage tests) must not write to real disk locations.
-      tmp_path gives you an isolated throwaway directory per test.
+      FileStorage tests must not write to real disk locations or interfere with each other.
+      tmp_path gives each test its own isolated throwaway directory.
 ```
 
 ---
@@ -101,16 +105,21 @@ pip install pytest pytest-cov
 ```yaml
 steps:
   1:
-    task: "Write devtool/errors.py"
+    task: "Write agentlog/errors.py"
+    why: >
+      RunRegistry.get() currently returns None for missing runs. FileStorage.load()
+      crashes with a raw JSONDecodeError on corrupt data. Both need to communicate
+      failures explicitly. Define the hierarchy now — one base class for everything
+      agentlog raises, specific subclasses for specific situations.
     detail: >
-      # devtool/errors.py
+      # agentlog/errors.py
 
       class DevToolError(Exception):
-          """Base exception for all devtool errors."""
+          """Base exception for all agentlog errors."""
           pass
 
       class RunError(DevToolError):
-          """Errors related to Run operations."""
+          """Errors related to a specific Run."""
           def __init__(self, run_id: str, message: str) -> None:
               self.run_id = run_id
               super().__init__(f"Run '{run_id}': {message}")
@@ -138,12 +147,17 @@ steps:
 
   2:
     task: "Use custom errors in RunRegistry and FileStorage"
+    why: >
+      The CLI (Stage 08) needs to catch RunNotFoundError and return a clean error
+      message. The runner (Stage 06) needs to catch StorageCorruptedError and
+      handle it without crashing. Neither of those works if the errors are generic.
+      Wire the hierarchy in now.
     detail: >
-      In RunRegistry (models.py):
+      In models.py — update RunRegistry:
 
-        from devtool.errors import RunNotFoundError, RunAlreadyExistsError
+        from agentlog.errors import RunNotFoundError, RunAlreadyExistsError
 
-        def get(self, run_id: str) -> Run:
+        def get(self, run_id: str) -> Run:          # return type: Run, not Run | None
             if run_id not in self._runs:
                 raise RunNotFoundError(run_id)
             return self._runs[run_id]
@@ -153,7 +167,9 @@ steps:
                 raise RunAlreadyExistsError(run.run_id)
             self._runs[run.run_id] = run
 
-      In FileStorage (storage.py), wrap json.loads with StorageCorruptedError:
+      In storage.py — wrap json.loads:
+
+        from agentlog.errors import StorageCorruptedError
 
         def load(self) -> RunRegistry:
             registry = RunRegistry()
@@ -167,17 +183,19 @@ steps:
             return registry
 
   3:
-    task: "Create the tests/ directory and conftest.py"
+    task: "Create tests/ and conftest.py"
+    why: >
+      conftest.py is pytest's shared fixture file — anything defined here is available
+      to every test file automatically. The fixtures here represent agentlog's core
+      objects in their most common test states.
     detail: >
       mkdir tests
-      touch tests/__init__.py
-      touch tests/conftest.py
+      touch tests/__init__.py tests/conftest.py
 
       # tests/conftest.py
 
       import pytest
-      from pathlib import Path
-      from devtool.models import Run, RunRegistry
+      from agentlog.models import Run, RunRegistry
 
       @pytest.fixture
       def sample_run() -> Run:
@@ -186,19 +204,21 @@ steps:
       @pytest.fixture
       def populated_registry() -> RunRegistry:
           registry = RunRegistry()
-          registry.add(Run(run_id="r1", prompt="first"))
-          registry.add(Run(run_id="r2", prompt="second"))
+          registry.add(Run(run_id="r1", prompt="first run"))
+          registry.add(Run(run_id="r2", prompt="second run"))
           return registry
-
-      conftest.py is automatically loaded by pytest — fixtures defined here
-      are available to all test files in the directory and below.
 
   4:
     task: "Write tests/test_models.py"
+    why: >
+      Run and RunRegistry are the core of agentlog. Every other layer (storage, runner,
+      CLI) depends on them behaving correctly. Test the behavior you care about:
+      status transitions, validation, registry operations, error cases.
     detail: >
       import pytest
-      from devtool.models import Run, RunRegistry
-      from devtool.errors import RunNotFoundError, RunAlreadyExistsError
+      from pydantic import ValidationError
+      from agentlog.models import Run, RunRegistry
+      from agentlog.errors import RunNotFoundError, RunAlreadyExistsError
 
       def test_run_initial_status(sample_run):
           assert sample_run.status == "pending"
@@ -216,15 +236,15 @@ steps:
 
       def test_run_prompt_stripped():
           r = Run(run_id="r1", prompt="  hello  ")
-          assert r.prompt == "hello"   # field_validator strips it
+          assert r.prompt == "hello"
 
       def test_run_empty_prompt_raises():
-          with pytest.raises(Exception):   # Pydantic ValidationError
+          with pytest.raises(ValidationError):
               Run(run_id="r1", prompt="   ")
 
-      def test_registry_add_and_get(populated_registry):
+      def test_registry_get(populated_registry):
           run = populated_registry.get("r1")
-          assert run.prompt == "first"
+          assert run.prompt == "first run"
 
       def test_registry_get_not_found(populated_registry):
           with pytest.raises(RunNotFoundError) as exc_info:
@@ -243,17 +263,25 @@ steps:
           assert "r999" not in populated_registry
 
       @pytest.mark.parametrize("status", ["pending", "running", "done", "failed"])
-      def test_valid_run_status(status):
+      def test_valid_run_statuses(status):
           r = Run(run_id="r1", prompt="test", status=status)
           assert r.status == status
 
+      def test_invalid_run_status_raises():
+          with pytest.raises(ValidationError):
+              Run(run_id="r1", prompt="test", status="blah")
+
   5:
     task: "Write tests/test_storage.py"
+    why: >
+      FileStorage is the only place agentlog touches the filesystem. Test it in
+      isolation using tmp_path — each test gets a clean directory, nothing
+      bleeds between tests, nothing touches your real .agentlog_data folder.
     detail: >
       import pytest
-      from devtool.models import Run, RunRegistry
-      from devtool.storage import FileStorage
-      from devtool.errors import StorageCorruptedError
+      from agentlog.models import Run, RunRegistry
+      from agentlog.storage import FileStorage
+      from agentlog.errors import StorageCorruptedError
 
       @pytest.fixture
       def storage(tmp_path):
@@ -271,14 +299,13 @@ steps:
           assert loaded.get("r1").status == "done"
           assert loaded.get("r1").result == "result"
 
-      def test_load_empty(storage):
+      def test_load_empty_returns_empty_registry(storage):
           registry = storage.load()
           assert len(registry) == 0
 
-      def test_corrupted_storage(storage, tmp_path):
-          # Write invalid JSON to the storage file
+      def test_corrupted_storage_raises(storage, tmp_path):
+          (tmp_path / "data").mkdir(parents=True, exist_ok=True)
           (tmp_path / "data" / "runs.json").write_text("not valid json {{{")
-
           with pytest.raises(StorageCorruptedError):
               storage.load()
 
@@ -287,35 +314,51 @@ steps:
           registry.add(Run(run_id="r1", prompt="test"))
           storage.save(registry)
           storage.clear()
-
           loaded = storage.load()
           assert len(loaded) == 0
 
+      def test_size_bytes_empty(storage):
+          assert storage.size_bytes == 0
+
+      def test_size_bytes_after_save(storage):
+          registry = RunRegistry()
+          registry.add(Run(run_id="r1", prompt="test"))
+          storage.save(registry)
+          assert storage.size_bytes > 0
+
   6:
     task: "Run pytest and read the output"
+    why: >
+      You've been running main.py manually to verify things work. From this stage on,
+      the test suite does that verification — faster, reproducible, and it catches
+      regressions when you change code in Stage 06 and 07.
     detail: >
       pytest tests/ -v
 
       The -v flag shows each test individually with pass/fail.
-      Read the output carefully — understand the format.
+      Read every line. Understand the format.
 
       Run with coverage:
-        pytest tests/ --cov=devtool --cov-report=term-missing
+        pytest tests/ --cov=agentlog --cov-report=term-missing
 
-      The coverage report shows which lines in your code are NOT covered by tests.
-      Add a test to cover any obvious gap.
+      The coverage report shows which lines in your code are NOT covered.
+      If coverage on models.py or storage.py is below 80%, add tests until it's not.
 
   7:
     task: "Write one deliberately failing test and read pytest's output"
+    why: >
+      You need to know what failure looks like — not just green passes.
+      pytest's assertion rewriting shows actual vs expected values, not just "AssertionError".
+      Read this output carefully. You'll see it constantly.
     detail: >
       def test_intentional_failure():
           r = Run(run_id="r1", prompt="test")
           assert r.status == "done"   # will fail — status is "pending"
 
-      Run pytest. Read the assertion error output carefully.
-      pytest shows: assert "pending" == "done" with the actual values.
-      This is pytest's assertion rewriting — much more useful than "AssertionError".
+      Run pytest. Read:
+        AssertionError: assert 'pending' == 'done'
 
+      This is pytest's assertion rewriting. Much more useful than a bare AssertionError.
       Delete the test after reading the output.
 ```
 
@@ -326,12 +369,12 @@ steps:
 ```yaml
 done_when:
   - pytest tests/ -v shows all tests passing
-  - You have tests for RunRegistry, FileStorage, and error cases
+  - RunRegistry.get() raises RunNotFoundError — never returns None
+  - FileStorage.load() raises StorageCorruptedError on invalid JSON
+  - You have parametrized tests for all four valid run statuses
   - You understand @pytest.fixture and can write a new one from memory
-  - You understand pytest.raises() and have used it for at least 3 error cases
-  - You've used @pytest.mark.parametrize at least once
-  - You understand the exception hierarchy and can add a new exception type
-  - Coverage report shows >80% for devtool/models.py and devtool/storage.py
+  - Coverage on agentlog/models.py and agentlog/storage.py is above 80%
+  - You can explain the exception hierarchy and add a new exception type in 30 seconds
 ```
 
 ---
@@ -340,7 +383,7 @@ done_when:
 
 ```yaml
 if_you_know_csharp:
-  custom_exceptions: "Same pattern — inherit from Exception, add constructor"
+  custom_exceptions: "Same pattern — inherit from Exception, override constructor"
   raise_from: "Like throw new AppException(...) { InnerException = e }"
   try/finally: "Identical concept and purpose"
   pytest_fixture: "Like [TestInitialize] or constructor injection in xUnit"
@@ -356,9 +399,10 @@ if_you_know_csharp:
 ```yaml
 open_questions:
   - What is the difference between pytest.raises() as a context manager vs as a decorator?
-  - What does conftest.py do specifically — where does pytest look for it?
-  - How do you mock a function in pytest? (Hint: pytest-mock or unittest.mock.patch)
-    You'll need this in the FastAPI ramp for dependency overrides.
+  - What does conftest.py do exactly — where does pytest look for it?
+    What happens if you have a conftest.py in both tests/ and the project root?
+  - How do you mock a function in pytest? (Hint: unittest.mock.patch or pytest-mock)
+    You'll need this in Stage 08 to fake LLM calls in CLI tests.
   - What is the difference between scope="function" and scope="session" on a fixture?
-    When would a session-scoped fixture make sense?
+    When would session-scoped make sense?
 ```
