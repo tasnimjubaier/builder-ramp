@@ -101,6 +101,7 @@ Each step builds on the previous. You're not learning features in isolation — 
 steps:
   1:
     task: "Write a plain Run class"
+    feature: "agentlog — models.py: Run class with __init__, __repr__, and __eq__"
     why: >
       agentlog tracks runs. A run has an ID, a prompt, a status, and eventually a result.
       Start with the simplest version — a plain class with an __init__ and a __repr__
@@ -132,6 +133,7 @@ steps:
 
   2:
     task: "Add a property to link result and status"
+    feature: "agentlog — models.py: Run.result property setter that auto-updates status"
     why: >
       When a run finishes, two things change together: the result gets set and the
       status flips to "done". If those are separate assignments, callers can forget
@@ -160,6 +162,7 @@ steps:
 
   3:
     task: "Convert Run to a dataclass"
+    feature: "agentlog — models.py: Run as @dataclass with auto-generated init, repr, eq"
     why: >
       Run is a data-holding class. Writing self.x = x for every field is noise.
       @dataclass generates __init__, __repr__, and __eq__ automatically.
@@ -197,6 +200,7 @@ steps:
 
   4:
     task: "Add a classmethod alternative constructor"
+    feature: "agentlog — models.py: Run.from_dict() classmethod for loading from raw data"
     why: >
       agentlog will eventually load runs from a JSON file. The data comes in as a dict,
       not as keyword arguments. Run.from_dict(data) is the clean interface for that —
@@ -223,6 +227,7 @@ steps:
 
   5:
     task: "Build RunRegistry to hold multiple runs"
+    feature: "agentlog — models.py: RunRegistry with O(1) lookup, filtering, and collection dunders"
     why: >
       agentlog needs to track more than one run at a time — list them, filter by status,
       look one up by ID. A plain list won't do: you want O(1) lookup by ID and clean
@@ -265,6 +270,7 @@ steps:
 
   6:
     task: "Add StreamingRun as a subclass"
+    feature: "agentlog — models.py: StreamingRun subclass for chunk-by-chunk LLM streaming"
     why: >
       Some LLM APIs stream responses — tokens arrive one at a time. A StreamingRun
       IS a Run (same ID, prompt, status, registry behavior) but it also accumulates
@@ -298,6 +304,7 @@ steps:
 
   7:
     task: "Wire it all together in main.py"
+    feature: "agentlog — models.py: integration smoke test — all three model classes working as a system"
     why: >
       Confirm the full model layer works as a system before moving to Stage 03.
       This is the state of agentlog's data layer at the end of this stage.

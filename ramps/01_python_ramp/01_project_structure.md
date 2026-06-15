@@ -111,6 +111,7 @@ The goal of this stage: get to `python main.py` printing real output, with a cle
 steps:
   1:
     task: "Create the skeleton"
+    feature: "agentlog — project scaffold: folder structure, package init, virtual environment"
     why: >
       agentlog needs a home. The package folder is where all future modules live —
       models, config, runner, storage, CLI. Create the structure now so imports work
@@ -128,6 +129,7 @@ steps:
 
   2:
     task: "Write something in utils.py"
+    feature: "agentlog — utils module: format_list() and greet() utility functions"
     why: >
       agentlog needs to display run summaries in the terminal. A format_list() utility
       will be used in every stage that prints output. Write it now so the import chain
@@ -148,6 +150,7 @@ steps:
 
   3:
     task: "Wire __init__.py"
+    feature: "agentlog — package public API: top-level exports via __init__.py"
     why: >
       You want to write `from agentlog import greet` in other modules, not
       `from agentlog.utils import greet`. __init__.py is where you control
@@ -163,6 +166,7 @@ steps:
 
   4:
     task: "Write main.py with the __main__ guard"
+    feature: "agentlog — entry point: main.py with __main__ guard and import chain verification"
     why: >
       main.py is the entry point for the whole project right now. Later it becomes
       a CLI, but for this stage it's a simple script that confirms imports work.
@@ -183,6 +187,7 @@ steps:
 
   5:
     task: "Run it"
+    feature: "agentlog — smoke test: confirm venv, package import, and output are working"
     detail: >
       python main.py
 
@@ -198,6 +203,7 @@ steps:
 
   6:
     task: "Add a constants module"
+    feature: "agentlog — constants module: VERSION, APP_NAME, and get_banner() utility"
     why: >
       agentlog will need a version number and an app name in multiple places —
       the CLI header, the storage file, the package metadata. One module,
@@ -219,6 +225,7 @@ steps:
 
   7:
     task: "Break imports deliberately"
+    feature: "agentlog — import system: understand ModuleNotFoundError, absolute imports, side effects"
     why: >
       You'll hit import errors constantly while building the rest of this project.
       Trigger them on purpose now so you recognize them on sight.
