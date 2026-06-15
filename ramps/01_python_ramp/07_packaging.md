@@ -2,19 +2,22 @@
 
 **Status:** not started
 **Estimated time:** 1–2 days
-**Type:** additive — add pyproject.toml and package structure to devtool/
+**Type:** additive — add pyproject.toml and wire the entry point
 **Depends on:** Stage 06 (full codebase built, tests passing)
-
-A Python library is just a folder with the right files. pyproject.toml is the single config file that defines everything: package name, version, dependencies, scripts, metadata. `pip install -e .` installs your package locally in editable mode — changes to your code take effect immediately without reinstalling. `pip install mini-agenteval` works because someone set up a pyproject.toml and published to PyPI. This stage makes that process demystified and reproducible.
 
 ---
 
-## What You're Building
+## The Story So Far
 
-Add `pyproject.toml` to devtool and wire everything up:
-- `pip install -e .` installs devtool as a real package
-- `devtool` command runs from the terminal (CLI entry point)
-- Package is ready to publish to TestPyPI
+agentlog works. Models validate, storage persists, the runner executes concurrently, tests pass. But you're still running it with `python main.py`. To use it the way you'd actually use a CLI tool — `agentlog run "hello"`, `agentlog list` — it needs to be a proper Python package: installed, entry point registered, importable from anywhere.
+
+This stage adds `pyproject.toml`, installs agentlog with `pip install -e .`, and wires the CLI entry point so `agentlog version` works from the terminal. Stage 08 then builds out the full CLI on top of this foundation.
+
+---
+
+## Why this stage exists
+
+A Python library is just a folder with the right files. `pyproject.toml` is the single config file that defines everything: name, version, dependencies, CLI entry points, test config. `pip install -e .` installs your package in editable mode — changes take effect immediately. `pip install mini-agenteval` works because someone wrote a `pyproject.toml` and published to PyPI. This stage makes that process demystified and reproducible.
 
 ---
 
@@ -24,62 +27,60 @@ Add `pyproject.toml` to devtool and wire everything up:
 concepts:
   pyproject.toml:
     what: >
-      The modern standard config file for Python packages. Replaces setup.py, setup.cfg,
-      and requirements.txt for most use cases. One file for everything.
+      The modern standard config file for Python packages.
+      Replaces setup.py, setup.cfg, and requirements.txt for most use cases.
     sections:
       "[build-system]": which build tool to use (hatchling, flit, setuptools)
-      "[project]":      package name, version, description, dependencies
-      "[project.scripts]": CLI entry points
-      "[tool.pytest.ini_options]": pytest configuration
+      "[project]":      name, version, description, dependencies
+      "[project.scripts]": CLI entry points — agentlog = "agentlog.cli:app"
+      "[tool.pytest.ini_options]": pytest config lives here too
     why: >
-      Every Python package you publish, contribute to, or fork will have this file.
-      Reading it tells you everything about the project — dependencies, entry points,
-      Python version requirements, dev tools.
+      Every Python package you publish, contribute to, or fork has this file.
+      Reading it tells you everything: dependencies, entry points, Python version,
+      dev tools. One file, all the answers.
 
   pip install -e . (editable install):
     what: >
-      Installs the package in "editable" mode — Python finds your source code directly
-      instead of copying it into site-packages. Changes take effect without reinstalling.
+      Installs the package so Python reads your source directly —
+      changes take effect without reinstalling.
     why: >
-      This is how you develop a library. Without -e, every code change requires reinstalling.
-      With -e, you edit a file and the change is immediately visible to anything that imports it.
+      Without -e, every code change requires reinstalling the package.
+      With -e, you edit a file and the change is immediately visible everywhere.
       All other ramp capstones use pip install -e . to install their own packages.
 
-  Entry points (scripts):
+  Entry points:
     what: >
       [project.scripts]
-      devtool = "devtool.cli:main"
-      Installs a devtool command in the venv's bin/ that runs devtool/cli.py's main() function.
+      agentlog = "agentlog.cli:app"
+      Installs a agentlog command in .venv/bin/ that runs cli.py's app function.
     why: >
-      This is how uvicorn, pytest, and typer CLI tools install their commands.
-      After pip install -e ., you can run devtool from anywhere in the terminal.
+      This is how uvicorn, pytest, and typer install their terminal commands.
+      After pip install -e ., agentlog runs from anywhere in the terminal.
 
-  Dependencies in pyproject.toml:
+  Optional dependencies:
     what: >
-      [project]
-      dependencies = ["pydantic>=2.0", "pydantic-settings>=2.0", "python-dotenv"]
-      Optional groups: [project.optional-dependencies] → dev = ["pytest", "pytest-asyncio"]
+      [project.optional-dependencies]
+      dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+      Install with: pip install -e ".[dev]"
     why: >
-      pip install -e ".[dev]" installs the package plus dev dependencies.
-      This is the standard for open source projects — users get the core package,
-      contributors get the dev tools.
+      Users get the core package. Contributors get dev tools.
+      Standard pattern for every open source Python project.
 
   Building and publishing:
     what: >
-      python -m build produces dist/ with .whl and .tar.gz files.
-      twine upload --repository testpypi dist/* uploads to TestPyPI.
+      python -m build → produces dist/ with .whl and .tar.gz
+      twine upload --repository testpypi dist/* → uploads to TestPyPI
     why: >
-      This is what makes pip install your-package work for anyone in the world.
-      TestPyPI is a safe sandbox — you publish there first to verify everything works.
+      This is what makes pip install agentlog work for anyone.
+      TestPyPI is the safe sandbox — publish there first.
 
-  __version__ and version management:
+  __version__:
     what: >
-      Convention: define __version__ = "0.1.0" in devtool/__init__.py.
-      pyproject.toml's version = "0.1.0" should match.
-      importlib.metadata.version("devtool") reads the installed package version.
+      __version__ = "0.1.0" in agentlog/__init__.py
+      importlib.metadata.version("agentlog") reads the installed version.
     why: >
       Users and tools need to know which version is installed.
-      This is the standard pattern — LangChain, Pydantic, FastAPI all do this.
+      LangChain, Pydantic, FastAPI all do this. agentlog does too.
 ```
 
 ---
@@ -90,17 +91,21 @@ concepts:
 steps:
   1:
     task: "Write pyproject.toml"
+    why: >
+      This is the package manifest. Everything pip needs to install agentlog
+      correctly — name, version, Python version, dependencies, entry point.
+      Write it once; pip install -e . handles everything else.
     detail: >
-      Create pyproject.toml in the project root (devtool/ folder, alongside .venv/):
+      Create pyproject.toml in the project root (alongside .venv/):
 
       [build-system]
       requires = ["hatchling"]
       build-backend = "hatchling.build"
 
       [project]
-      name = "devtool"
+      name = "agentlog"
       version = "0.1.0"
-      description = "A CLI tool for managing AI agent runs"
+      description = "A CLI tool for managing and inspecting AI agent runs"
       readme = "README.md"
       requires-python = ">=3.12"
       dependencies = [
@@ -110,6 +115,7 @@ steps:
           "pyyaml>=6.0",
           "httpx>=0.27",
           "typer>=0.12",
+          "rich>=13.0",
       ]
 
       [project.optional-dependencies]
@@ -120,76 +126,94 @@ steps:
       ]
 
       [project.scripts]
-      devtool = "devtool.cli:app"
+      agentlog = "agentlog.cli:app"
 
       [tool.pytest.ini_options]
       asyncio_mode = "auto"
 
   2:
     task: "Install the package in editable mode"
+    why: >
+      After this command, agentlog is a real installed package. You can import it
+      from anywhere in the venv, and the agentlog terminal command exists.
+      Changes to your source code take effect immediately — no reinstall.
     detail: >
-      # With your venv active, from the project root:
       pip install -e ".[dev]"
 
       Verify:
-        pip show devtool         # shows package info
-        python -c "import devtool; print(devtool.__version__)"
+        pip show agentlog
+        python -c "import agentlog; print(agentlog.__version__)"
 
-      Now open devtool/utils.py and add a new function.
-      Import it immediately — no reinstall needed. This is editable mode.
+      Now edit agentlog/utils.py — add any function.
+      Import it in a Python REPL immediately. No reinstall. This is editable mode.
 
   3:
     task: "Add __version__ to __init__.py"
+    why: >
+      The CLI's agentlog version command needs to print this.
+      The pyproject.toml version and __version__ should always match.
     detail: >
-      # devtool/__init__.py
+      # agentlog/__init__.py
 
       __version__ = "0.1.0"
 
-      from devtool.utils import greet
+      from agentlog.utils import greet
 
-      # Verify from terminal:
-      python -c "import devtool; print(devtool.__version__)"
-      python -c "from importlib.metadata import version; print(version('devtool'))"
+      Verify:
+        python -c "import agentlog; print(agentlog.__version__)"
+        python -c "from importlib.metadata import version; print(version('agentlog'))"
 
   4:
-    task: "Write devtool/cli.py (placeholder for capstone)"
+    task: "Write agentlog/cli.py — the entry point stub"
+    why: >
+      The full CLI is built in Stage 08. Right now you just need the entry point
+      to exist so the agentlog terminal command works. A single version command
+      is enough to confirm the wiring is correct.
     detail: >
-      # devtool/cli.py
-      # Full CLI is built in Stage 08. This is the entry point stub.
+      # agentlog/cli.py
 
       import typer
+      from rich.console import Console
 
-      app = typer.Typer(name="devtool", help="Manage AI agent runs from the terminal.")
+      app = typer.Typer(name="agentlog", help="Manage AI agent runs from the terminal.")
+      console = Console()
 
       @app.command()
       def version():
           """Show the current version."""
-          from devtool import __version__
-          typer.echo(f"devtool v{__version__}")
+          from agentlog import __version__
+          console.print(f"agentlog [cyan]v{__version__}[/cyan]")
 
       if __name__ == "__main__":
           app()
 
-      Install Typer first: pip install typer (already in pyproject.toml, so it's already installed)
-      Test: devtool version   ← uses the entry point installed by pip install -e .
+      Test:
+        agentlog version        # uses the entry point — should print "agentlog v0.1.0"
+        agentlog --help         # shows the help text from typer
 
   5:
     task: "Write README.md"
+    why: >
+      Every package published to PyPI needs a README. This one is minimal now —
+      Stage 08 expands it when all commands are built.
     detail: >
-      # devtool
+      # agentlog
 
-      A CLI tool for managing AI agent runs.
+      A CLI tool for managing and inspecting AI agent runs locally.
 
       ## Installation
 
       ```bash
-      pip install devtool
+      pip install agentlog
       ```
 
       ## Usage
 
       ```bash
-      devtool version
+      agentlog version
+      agentlog run "Write a haiku about Python"
+      agentlog list
+      agentlog get <run_id>
       ```
 
       ## Development
@@ -201,64 +225,67 @@ steps:
       pytest tests/
       ```
 
-      Every package needs a README. This one is minimal — you'll expand it in Stage 08.
-
   6:
     task: "Build the package"
+    why: >
+      python -m build produces the actual artifacts that pip installs and PyPI hosts.
+      Opening the .whl file shows you exactly what gets distributed — demystifies
+      the entire packaging system.
     detail: >
       pip install build
       python -m build
 
       This creates:
         dist/
-          devtool-0.1.0-py3-none-any.whl
-          devtool-0.1.0.tar.gz
+          agentlog-0.1.0-py3-none-any.whl
+          agentlog-0.1.0.tar.gz
 
-      The .whl is what pip installs. The .tar.gz is the source distribution.
-      Open the .whl file — it's a zip. Extract it and look inside.
-      This is exactly what gets uploaded to PyPI and downloaded by users.
+      The .whl is a zip file. Extract it with unzip and look inside.
+      This is exactly what gets uploaded to PyPI and downloaded by pip.
 
   7:
-    task: "Publish to TestPyPI (optional but recommended)"
+    task: "Publish to TestPyPI (optional but do it once)"
+    why: >
+      Publishing to TestPyPI and then installing from it confirms the full cycle:
+      pyproject.toml → build → upload → pip install → running tool.
+      Do this once so the process is not mysterious when you publish a real OSS project.
     detail: >
       Register at test.pypi.org (free, separate from pypi.org)
       pip install twine
       twine upload --repository testpypi dist/*
 
-      Then install from TestPyPI in a fresh venv to confirm it works:
+      Verify in a fresh venv:
         python -m venv /tmp/test_venv
         source /tmp/test_venv/bin/activate
-        pip install --index-url https://test.pypi.org/simple/ devtool
-        devtool version
+        pip install --index-url https://test.pypi.org/simple/ agentlog
+        agentlog version
         deactivate
 ```
 
 ---
 
-## Final Project Structure
-
-After this stage, the devtool project looks like:
+## Final Project Structure (end of Stage 07)
 
 ```
-devtool/                   ← project root
+agentlog/                   ← project root
 ├── .venv/                 ← virtual environment (gitignored)
 ├── .env                   ← local config (gitignored)
 ├── .gitignore
-├── pyproject.toml         ← package definition
+├── pyproject.toml
 ├── README.md
-├── devtool/               ← the package
+├── agentlog/
 │   ├── __init__.py        ← version + exports
-│   ├── cli.py             ← CLI entry point (expanded in Stage 08)
+│   ├── cli.py             ← entry point stub (expanded in Stage 08)
 │   ├── config.py          ← Settings with BaseSettings
 │   ├── constants.py       ← VERSION, APP_NAME
-│   ├── errors.py          ← custom exception hierarchy
+│   ├── errors.py          ← exception hierarchy
 │   ├── models.py          ← Run, RunRegistry (Pydantic)
 │   ├── runner.py          ← async RunRunner
 │   ├── storage.py         ← FileStorage
 │   └── utils.py           ← greet, format_list, get_banner
 └── tests/
     ├── __init__.py
-    ├── conftest.py        ← shared fixtures
+    ├── conftest.py
     ├── test_models.py
     ├── test_storage.py
     └── test_runner.py
@@ -270,12 +297,26 @@ devtool/                   ← project root
 
 ```yaml
 done_when:
-  - pip install -e ".[dev]" works without errors
-  - devtool version runs from the terminal via the entry point
-  - python -m build produces dist/ successfully
+  - pip install -e ".[dev]" installs cleanly
+  - agentlog version runs from the terminal via the entry point
+  - agentlog --help shows correct help text
+  - python -m build produces dist/ without errors
+  - All existing tests still pass after the refactor
   - You can explain pyproject.toml's three main sections in one sentence each
   - You understand the difference between pip install . and pip install -e .
-  - All existing tests still pass after the refactor
+```
+
+---
+
+## C#/.NET Comparison
+
+```yaml
+if_you_know_csharp:
+  pyproject.toml: "Like .csproj — package definition, dependencies, build config"
+  pip install -e .: "Like project reference in a solution — edits to source reflect immediately"
+  entry_point: "Like a console app's Main() registered as an executable"
+  hatchling: "Like MSBuild — the build backend that pyproject.toml delegates to"
+  twine upload: "Like dotnet nuget push — publishes to the package registry"
 ```
 
 ---
@@ -286,9 +327,8 @@ done_when:
 open_questions:
   - What is the difference between a wheel (.whl) and a source distribution (.tar.gz)?
     When would a user need the source distribution?
-  - What does hatchling do? Could you use setuptools instead? What's the difference?
-  - How do you handle a dependency that has different versions for different Python versions?
-    (Hint: look up environment markers in PEP 508)
-  - What is semantic versioning (semver)? How does it apply to Python packages?
-    When should you increment major vs minor vs patch version?
+  - What does hatchling do? Could you use setuptools instead?
+  - What is semantic versioning? When do you increment major vs minor vs patch?
+  - How do you handle dependencies that need different versions for different Python versions?
+    (Hint: PEP 508 environment markers)
 ```
