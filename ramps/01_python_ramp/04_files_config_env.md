@@ -104,6 +104,7 @@ pip install python-dotenv pydantic-settings pyyaml
 steps:
   1:
     task: "Create a .env file with agentlog's config"
+    feature: "agentlog — config: .env file with API key, app env, and runtime settings"
     why: >
       agentlog will eventually make real OpenAI API calls. The API key lives here —
       never in source code, never in git. Set up the pattern now so it's in place
@@ -120,6 +121,7 @@ steps:
 
   2:
     task: "Write agentlog/config.py with BaseSettings"
+    feature: "agentlog — config.py: Settings singleton with type-safe env var loading via pydantic-settings"
     why: >
       agentlog needs its API key and settings wherever it runs — in the CLI, in the runner,
       in tests. A module-level settings singleton loads once on import and is available
@@ -149,6 +151,7 @@ steps:
 
   3:
     task: "Write agentlog/storage.py — persist runs to disk"
+    feature: "agentlog — storage.py: FileStorage class — save and load RunRegistry as JSON via pathlib"
     why: >
       RunRegistry.dump_all() already returns a list of dicts. FileStorage just needs
       to write that list to a JSON file and read it back. This is the persistence layer
@@ -191,6 +194,7 @@ steps:
 
   4:
     task: "Test the full persistence round-trip"
+    feature: "agentlog — storage.py: end-to-end persistence — runs survive process restarts"
     why: >
       This is the first time agentlog's data actually survives a restart.
       Run this, check the file on disk, restart the process, load it back —
@@ -224,6 +228,7 @@ steps:
 
   5:
     task: "Add YAML config support to FileStorage"
+    feature: "agentlog — storage.py: per-project YAML config read/write (model name, temperature, tags)"
     why: >
       agentlog will eventually support per-project config — model name, temperature,
       custom tags. YAML is the natural format for that. Add it to FileStorage now
@@ -250,6 +255,7 @@ steps:
 
   6:
     task: "Load a real env var from the OS"
+    feature: "agentlog — config.py: OS-injected env vars (no .env file) — the production deployment pattern"
     why: >
       The .env file is for local development. In production (Docker, CI, cloud),
       env vars are injected by the platform — no .env file. Confirm agentlog

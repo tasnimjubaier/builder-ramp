@@ -113,6 +113,7 @@ pip install pydantic
 steps:
   1:
     task: "Rewrite Run as a Pydantic BaseModel"
+    feature: "agentlog — models.py: Run as Pydantic BaseModel with Literal status validation and JSON serialization"
     why: >
       The dataclass Run has no validation. A Pydantic Run validates status,
       rejects empty prompts, and serializes to JSON for free. The interface
@@ -149,6 +150,7 @@ steps:
 
   2:
     task: "Test Pydantic's validation — make it reject bad data"
+    feature: "agentlog — models.py: Run validation error handling and type coercion behavior"
     why: >
       The whole point of switching from dataclass to Pydantic is that bad data
       gets caught at construction, not three steps later. Verify this works
@@ -172,6 +174,7 @@ steps:
 
   3:
     task: "Add a field validator to clean prompt input"
+    feature: "agentlog — models.py: Run.prompt field validator — reject empty/whitespace, strip on entry"
     why: >
       A run with an empty or whitespace-only prompt is a bug — no LLM call
       will produce a meaningful result. Enforce this at the model level so
@@ -202,6 +205,7 @@ steps:
 
   4:
     task: "Add a nested TokenUsage model"
+    feature: "agentlog — models.py: TokenUsage nested model on Run for tracking LLM token costs"
     why: >
       LLM APIs return token counts with every response. Storing them on Run
       lets agentlog track cost and usage over time. A nested model keeps Run
@@ -236,6 +240,7 @@ steps:
 
   5:
     task: "Serialization round-trip — this is how FileStorage will work"
+    feature: "agentlog — models.py: Run JSON round-trip (model_dump / model_validate) that FileStorage depends on"
     why: >
       Stage 04 builds FileStorage, which saves runs to disk as JSON and loads them back.
       That means: Run → dict → JSON string → file → JSON string → dict → Run.
@@ -262,6 +267,7 @@ steps:
 
   6:
     task: "Inspect the JSON schema"
+    feature: "agentlog — models.py: Run.model_json_schema() — the schema FastAPI and LangGraph tools use"
     why: >
       FastAPI generates its /docs page from this schema automatically.
       LangGraph uses it for tool input validation.
@@ -278,6 +284,7 @@ steps:
 
   7:
     task: "Update RunRegistry to use Pydantic Run"
+    feature: "agentlog — models.py: RunRegistry.dump_all() and load_all() for FileStorage integration"
     why: >
       RunRegistry stores and retrieves Run instances. With Pydantic Run, it
       also gets free serialization — dump_all() returns a list of dicts ready
