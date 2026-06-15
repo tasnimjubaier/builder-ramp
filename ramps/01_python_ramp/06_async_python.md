@@ -107,6 +107,7 @@ pip install pytest-asyncio httpx
 steps:
   1:
     task: "See the coroutine-without-await mistake on purpose"
+    feature: "agentlog — runner.py: async mental model — coroutine objects vs awaited results"
     why: >
       This is the mistake every async beginner makes. See it now in a controlled
       setting so you recognize it immediately in real code.
@@ -136,6 +137,7 @@ steps:
 
   2:
     task: "Prove gather() is faster than sequential"
+    feature: "agentlog — runner.py: asyncio.gather() concurrency — the performance case for async batch execution"
     why: >
       agentlog submits multiple runs concurrently. You need to see the timing
       difference with your own eyes. This is the moment async stops being abstract.
@@ -172,6 +174,7 @@ steps:
 
   3:
     task: "Build the async RunRunner"
+    feature: "agentlog — runner.py: RunRunner with async execute() and execute_batch() — the core execution layer"
     why: >
       This is the core of agentlog's execution layer. execute() runs one prompt —
       updates the run's status, simulates the LLM call, saves the result.
@@ -225,6 +228,7 @@ steps:
 
   4:
     task: "Use async with for an HTTP client"
+    feature: "agentlog — runner.py: async HTTP pattern with httpx.AsyncClient — prep for real LLM calls in Stage 08"
     why: >
       Stage 08 replaces simulate_llm_call with a real HTTP request to the OpenAI API.
       httpx.AsyncClient is how you make async HTTP calls in Python.
@@ -246,6 +250,7 @@ steps:
 
   5:
     task: "Prove that blocking inside async kills concurrency"
+    feature: "agentlog — runner.py: blocking I/O anti-pattern — understand why time.sleep() in async def breaks everything"
     why: >
       Understanding what goes wrong is as important as understanding what goes right.
       This exercise teaches the rule you must never break: never call blocking
@@ -277,6 +282,7 @@ steps:
 
   6:
     task: "Write async tests with pytest-asyncio"
+    feature: "agentlog — test suite: tests/test_runner.py with pytest-asyncio covering RunRunner correctness and concurrency timing"
     why: >
       RunRunner is async — you can't test it with plain pytest.
       pytest-asyncio lets you write async test functions.

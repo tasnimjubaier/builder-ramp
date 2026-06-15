@@ -106,6 +106,7 @@ pip install pytest pytest-cov
 steps:
   1:
     task: "Write agentlog/errors.py"
+    feature: "agentlog — errors.py: DevToolError hierarchy — RunNotFoundError, StorageCorruptedError, ConfigError"
     why: >
       RunRegistry.get() currently returns None for missing runs. FileStorage.load()
       crashes with a raw JSONDecodeError on corrupt data. Both need to communicate
@@ -147,6 +148,7 @@ steps:
 
   2:
     task: "Use custom errors in RunRegistry and FileStorage"
+    feature: "agentlog — models.py + storage.py: wire custom errors — RunRegistry raises RunNotFoundError, FileStorage raises StorageCorruptedError"
     why: >
       The CLI (Stage 08) needs to catch RunNotFoundError and return a clean error
       message. The runner (Stage 06) needs to catch StorageCorruptedError and
@@ -184,6 +186,7 @@ steps:
 
   3:
     task: "Create tests/ and conftest.py"
+    feature: "agentlog — test suite: pytest setup with shared fixtures for Run and RunRegistry"
     why: >
       conftest.py is pytest's shared fixture file — anything defined here is available
       to every test file automatically. The fixtures here represent agentlog's core
@@ -210,6 +213,7 @@ steps:
 
   4:
     task: "Write tests/test_models.py"
+    feature: "agentlog — test suite: tests/test_models.py covering Run status transitions, validation, and RunRegistry behavior"
     why: >
       Run and RunRegistry are the core of agentlog. Every other layer (storage, runner,
       CLI) depends on them behaving correctly. Test the behavior you care about:
@@ -273,6 +277,7 @@ steps:
 
   5:
     task: "Write tests/test_storage.py"
+    feature: "agentlog — test suite: tests/test_storage.py covering FileStorage save/load, corruption handling, and clear"
     why: >
       FileStorage is the only place agentlog touches the filesystem. Test it in
       isolation using tmp_path — each test gets a clean directory, nothing
@@ -328,6 +333,7 @@ steps:
 
   6:
     task: "Run pytest and read the output"
+    feature: "agentlog — test suite: run full pytest with coverage, establish the baseline"
     why: >
       You've been running main.py manually to verify things work. From this stage on,
       the test suite does that verification — faster, reproducible, and it catches
@@ -346,6 +352,7 @@ steps:
 
   7:
     task: "Write one deliberately failing test and read pytest's output"
+    feature: "agentlog — test suite: understand pytest assertion rewriting and failure output format"
     why: >
       You need to know what failure looks like — not just green passes.
       pytest's assertion rewriting shows actual vs expected values, not just "AssertionError".
