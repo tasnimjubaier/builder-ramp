@@ -2,16 +2,24 @@
 
 **Status:** not started
 **Estimated time:** 2 days
-**Type:** additive — add async capabilities to devtool/
-**Depends on:** Stage 05 (you can run pytest, models work)
-
-Async is the most conceptually distinct thing in this ramp — it requires a mental model shift, not just new syntax. Once you have the model, every async framework (FastAPI, LangGraph, MCP) becomes obvious. Without it, async code looks like magic that sometimes works and sometimes blocks for no apparent reason.
+**Type:** additive — add agentlog/runner.py
+**Depends on:** Stage 05 (errors and testing in place)
 
 ---
 
-## What You're Building
+## The Story So Far
 
-Add `devtool/runner.py` — an async job runner that executes runs concurrently. Add async tests using `pytest-asyncio`. By the end you'll understand the event loop, coroutines, and concurrent execution — the foundations of everything in the other ramps.
+agentlog has validated models, persistent storage, and a test suite. The one thing it can't do yet is actually run prompts. That's what `runner.py` does — it takes a Run, sends the prompt to an LLM, and saves the result.
+
+Here's the problem: LLM calls are slow. 1–3 seconds each. If a user queues 5 runs, running them sequentially takes 5–15 seconds. Async solves this — run all 5 concurrently, finish in the time it takes one. That's not an optimization, it's a requirement for a usable tool.
+
+This stage builds the async runner and, in doing so, teaches you the mental model behind every async framework you'll use: FastAPI, LangGraph, the MCP SDK.
+
+---
+
+## Why this stage exists
+
+Async is the most conceptually distinct thing in this ramp — it requires a mental model shift, not just new syntax. Once you have the model, async code is obvious. Without it, async looks like magic that sometimes works and sometimes blocks for no apparent reason. FastAPI and LangGraph are async from top to bottom. You need this stage to use them correctly.
 
 ---
 
@@ -21,71 +29,66 @@ Add `devtool/runner.py` — an async job runner that executes runs concurrently.
 concepts:
   The event loop mental model:
     what: >
-      Python runs one thread. The event loop is a manager that runs tasks.
+      Python runs one thread. The event loop manages tasks.
       When a task hits an await, it pauses and the event loop runs another task.
-      When the awaited thing (network call, sleep, file read) finishes, the task resumes.
-      No parallelism — just cooperative multitasking. Tasks take turns.
+      When the awaited thing finishes, the task resumes.
+      No parallelism — cooperative multitasking. Tasks take turns at await points.
     why: >
-      This mental model explains every async behavior. Why does calling a sync
-      blocking function inside async def freeze everything? Because it doesn't await —
-      it holds the event loop hostage. Why does asyncio.gather() run things concurrently?
-      Because it lets multiple tasks await at the same time.
+      This mental model explains every async behavior.
+      A blocking function inside async def freezes everything because it never yields.
+      asyncio.gather() runs things concurrently because it lets multiple tasks
+      hit await at the same time.
 
   async def and await:
     what: >
       async def makes a function a coroutine — calling it returns a coroutine object,
-      it does NOT run the function.
+      it does NOT run the function body.
       await runs the coroutine and waits for it to finish.
       You can only await inside an async def.
     why: >
-      This is the most common confusion. greet() where greet is async def doesn't run it.
-      await greet() does. Forgetting await gives you a coroutine object, not a result.
+      The most common confusion: calling an async function without await does nothing.
+      You get a coroutine object sitting there, not a result.
+      You'll make this mistake once — seeing the output is the lesson.
 
   asyncio.run():
     what: >
+      asyncio.run(my_coroutine()) — starts the event loop, runs the coroutine, stops it.
       The entry point into async code from synchronous code.
-      asyncio.run(my_coroutine()) — starts the event loop, runs the coroutine, stops the loop.
     why: >
-      You can't await from a regular function. asyncio.run() is the bridge.
-      FastAPI handles this for you — you never call asyncio.run() in a FastAPI handler.
-      But in scripts and tests you call it.
+      FastAPI handles this for you in route handlers.
+      In scripts and tests, you call it yourself.
 
   asyncio.gather():
     what: >
       await asyncio.gather(coro1(), coro2(), coro3())
-      Runs all three concurrently — each one can make progress while others await.
-      Returns a list of results in the same order as the inputs.
+      Runs all three concurrently. Returns results in input order.
     why: >
-      This is where async pays off. Three LLM calls that each take 2 seconds take 2 seconds
-      total with gather(), not 6 seconds sequentially. You'll use this in agent pipelines.
+      Three LLM calls at 1s each: sequential = 3s, gather = ~1s.
+      This is the entire value proposition of async for agentlog.
 
   asyncio.sleep() vs time.sleep():
     what: >
-      asyncio.sleep(1) — async sleep, yields control to the event loop while waiting
-      time.sleep(1)    — sync sleep, blocks the entire thread for 1 second
+      asyncio.sleep(1) — yields control to the event loop while waiting
+      time.sleep(1)    — blocks the entire thread
     why: >
-      time.sleep() inside async def freezes the event loop for the full duration —
-      no other tasks can run. This is the #1 async performance mistake.
-      asyncio.sleep(0) is a common pattern to explicitly yield control with no delay.
+      time.sleep() inside async def freezes the event loop for the full duration.
+      No other tasks can run. The #1 async performance mistake.
 
   asyncio.create_task():
     what: >
       task = asyncio.create_task(coro())
-      Creates a task that starts running immediately (on the next event loop tick).
-      Returns a Task object you can await later.
+      Creates a task that starts immediately on the next event loop tick.
     why: >
-      gather() waits for all coroutines together. create_task() fires and forgets —
-      useful when you want something to run in the background without blocking the current flow.
-      FastAPI's BackgroundTasks use this pattern internally.
+      gather() waits for all inputs together. create_task() fires and forgets —
+      useful for background work. FastAPI BackgroundTasks use this pattern.
 
   async with and async for:
     what: >
-      async with resource: — async context manager (for async-capable resources)
+      async with resource: — async context manager (httpx.AsyncClient)
       async for item in aiter: — iterate over an async generator
     why: >
-      HTTP clients (httpx.AsyncClient) use async with.
-      LangGraph's astream_events() returns an async generator — you iterate with async for.
-      You'll use both constantly.
+      LangGraph's astream_events() returns an async generator — iterated with async for.
+      You'll use both constantly in the agentic ramp.
 ```
 
 ---
@@ -103,53 +106,56 @@ pip install pytest-asyncio httpx
 ```yaml
 steps:
   1:
-    task: "Write your first coroutine and run it"
+    task: "See the coroutine-without-await mistake on purpose"
+    why: >
+      This is the mistake every async beginner makes. See it now in a controlled
+      setting so you recognize it immediately in real code.
     detail: >
-      # devtool/runner.py
+      # agentlog/runner.py — start here
 
       import asyncio
 
       async def greet_async(name: str) -> str:
-          await asyncio.sleep(0.1)   # simulate async work
+          await asyncio.sleep(0.1)
           return f"Hello, {name}!"
 
+      # DO THIS first — observe the output
+      result = greet_async("world")    # no await
+      print(result)                    # <coroutine object greet_async at 0x...>
+      print(type(result))              # <class 'coroutine'>
+
+      # Now correct it
       async def main():
           result = await greet_async("world")
-          print(result)
+          print(result)   # "Hello, world!"
 
-      if __name__ == "__main__":
-          asyncio.run(main())
+      asyncio.run(main())
 
-      Run: python devtool/runner.py
-
-      Now add this — DON'T await — and observe:
-        result = greet_async("world")   # no await
-        print(result)                   # <coroutine object greet_async ...>
-        print(type(result))             # <class 'coroutine'>
-
-      This is the most important thing to see early: calling an async function
-      without await gives you a coroutine object, not the result.
+      The coroutine object is the function call doing nothing.
+      await is what actually runs it.
 
   2:
-    task: "Run tasks concurrently with gather()"
+    task: "Prove gather() is faster than sequential"
+    why: >
+      agentlog submits multiple runs concurrently. You need to see the timing
+      difference with your own eyes. This is the moment async stops being abstract.
     detail: >
+      import asyncio, time
+
       async def simulate_llm_call(prompt: str, delay: float) -> str:
           print(f"Starting: {prompt}")
-          await asyncio.sleep(delay)   # simulate network latency
+          await asyncio.sleep(delay)
           print(f"Done: {prompt}")
           return f"Result for: {prompt}"
 
       async def run_sequential():
-          import time
           start = time.time()
           r1 = await simulate_llm_call("prompt 1", 1.0)
           r2 = await simulate_llm_call("prompt 2", 1.0)
           r3 = await simulate_llm_call("prompt 3", 1.0)
           print(f"Sequential: {time.time() - start:.1f}s")   # ~3.0s
-          return [r1, r2, r3]
 
       async def run_concurrent():
-          import time
           start = time.time()
           results = await asyncio.gather(
               simulate_llm_call("prompt 1", 1.0),
@@ -157,47 +163,73 @@ steps:
               simulate_llm_call("prompt 3", 1.0),
           )
           print(f"Concurrent: {time.time() - start:.1f}s")   # ~1.0s
-          return results
 
       asyncio.run(run_sequential())
       asyncio.run(run_concurrent())
 
-      Read the timing output. The concurrent version takes ~1s not ~3s.
-      This is the entire value proposition of async — but ONLY for I/O-bound work.
+      Read the timing. The concurrent version takes ~1s, not ~3s.
+      This is why agentlog uses async for its runner.
 
   3:
-    task: "Build an async RunRunner"
+    task: "Build the async RunRunner"
+    why: >
+      This is the core of agentlog's execution layer. execute() runs one prompt —
+      updates the run's status, simulates the LLM call, saves the result.
+      execute_batch() runs many concurrently using gather().
+      The LLM call is simulated with asyncio.sleep() for now —
+      Stage 08 replaces it with a real API call.
     detail: >
+      # agentlog/runner.py (full version)
+
       import asyncio
-      from devtool.models import Run, RunRegistry
-      from devtool.storage import FileStorage
+      from agentlog.models import Run, RunRegistry
+      from agentlog.storage import FileStorage
 
       class RunRunner:
           def __init__(self, storage: FileStorage) -> None:
               self.storage = storage
-              self._registry = RunRegistry()
 
           async def execute(self, run: Run) -> Run:
               """Execute a single run — simulates async LLM call."""
-              self._registry.add(run)
               run.status = "running"
 
               try:
-                  # Simulate an async operation (real: await llm_client.complete(...))
+                  # Real call in Stage 08: result = await llm_client.complete(run.prompt)
                   await asyncio.sleep(0.5)
-                  run.mark_done(f"Processed: {run.prompt[:30]}")
+                  run.mark_done(f"Processed: {run.prompt[:50]}")
               except Exception as e:
                   run.mark_failed(str(e))
 
-              self.storage.save(self._registry)
               return run
 
           async def execute_batch(self, runs: list[Run]) -> list[Run]:
               """Execute multiple runs concurrently."""
               return await asyncio.gather(*[self.execute(run) for run in runs])
 
+      Test in main.py:
+        import asyncio
+        from agentlog.models import Run
+        from agentlog.runner import RunRunner
+        from agentlog.storage import FileStorage
+
+        async def main():
+            storage = FileStorage()
+            runner = RunRunner(storage)
+
+            runs = [Run(run_id=f"r{i}", prompt=f"prompt {i}") for i in range(3)]
+            results = await runner.execute_batch(runs)
+            for r in results:
+                print(r)
+
+        asyncio.run(main())
+
   4:
-    task: "Use async with for a resource"
+    task: "Use async with for an HTTP client"
+    why: >
+      Stage 08 replaces simulate_llm_call with a real HTTP request to the OpenAI API.
+      httpx.AsyncClient is how you make async HTTP calls in Python.
+      The async with ensures the connection pool closes properly.
+      Practice the pattern now so it's familiar when you need it.
     detail: >
       import httpx
 
@@ -206,89 +238,88 @@ steps:
               response = await client.get(url)
               return response.text
 
-      # Test
       text = asyncio.run(fetch_url("https://httpbin.org/get"))
       print(text[:200])
 
-      The async with ensures the HTTP connection pool is closed properly.
-      This is the httpx pattern you'll use in the RAG and agentic ramps.
+      The async with is the async equivalent of the with statement you used in Stage 04.
+      It guarantees the HTTP connection pool closes even if an exception occurs.
 
   5:
-    task: "Write async tests with pytest-asyncio"
+    task: "Prove that blocking inside async kills concurrency"
+    why: >
+      Understanding what goes wrong is as important as understanding what goes right.
+      This exercise teaches the rule you must never break: never call blocking
+      functions inside async def.
     detail: >
-      Create tests/test_runner.py:
-
-      import pytest
-      import asyncio
-      from devtool.models import Run
-      from devtool.runner import RunRunner
-      from devtool.storage import FileStorage
-
-      @pytest.fixture
-      def runner(tmp_path):
-          storage = FileStorage(data_dir=tmp_path / "data")
-          return RunRunner(storage)
-
-      @pytest.mark.asyncio
-      async def test_execute_single_run(runner):
-          run = Run(run_id="r1", prompt="test")
-          result = await runner.execute(run)
-          assert result.status == "done"
-          assert "Processed" in result.result
-
-      @pytest.mark.asyncio
-      async def test_execute_batch(runner):
-          runs = [Run(run_id=f"r{i}", prompt=f"prompt {i}") for i in range(5)]
-          results = await runner.execute_batch(runs)
-          assert len(results) == 5
-          assert all(r.status == "done" for r in results)
-
-      @pytest.mark.asyncio
-      async def test_batch_is_faster_than_sequential(runner):
-          import time
-          runs = [Run(run_id=f"r{i}", prompt=f"prompt {i}") for i in range(3)]
-
-          start = time.time()
-          await runner.execute_batch(runs)
-          concurrent_time = time.time() - start
-
-          # Each run sleeps 0.5s — concurrent should be ~0.5s, sequential ~1.5s
-          assert concurrent_time < 1.2   # well under 3x sequential
-
-      Add to pytest.ini or pyproject.toml:
-        [tool.pytest.ini_options]
-        asyncio_mode = "auto"
-      
-      Or add @pytest.mark.asyncio to each async test.
-
-  6:
-    task: "Understand what blocking in async means"
-    detail: >
-      Add this to runner.py and test it:
-
       async def blocking_mistake():
           import time
-          print("Starting 3 tasks...")
+          print("Running 3 tasks with time.sleep (WRONG)...")
+          start = time.time()
           await asyncio.gather(
               _blocking_task("task 1"),
               _blocking_task("task 2"),
               _blocking_task("task 3"),
           )
+          print(f"Took: {time.time() - start:.1f}s")   # ~3s — sequential!
 
       async def _blocking_task(name: str):
           import time
-          print(f"{name}: start")
-          time.sleep(1)   # WRONG — sync sleep blocks entire event loop
-          print(f"{name}: done")
+          time.sleep(1)   # blocks the entire event loop
+          print(f"{name} done")
 
       asyncio.run(blocking_mistake())
-      Time it. It takes ~3s, not ~1s. All three tasks run sequentially despite gather().
 
-      Fix: replace time.sleep(1) with await asyncio.sleep(1).
-      Time it again. Now ~1s.
+      Time it: ~3s, not ~1s. All three tasks ran sequentially despite gather().
+      Fix: replace time.sleep(1) with await asyncio.sleep(1). Time it again. ~1s.
 
-      This exercise teaches the rule: never call blocking functions inside async def.
-      time.sleep, requests.get, open() with a slow disk — all block the event loop.
+      The rule: never use time.sleep, requests.get, or any blocking I/O inside async def.
+      Always use the async equivalent.
+
+  6:
+    task: "Write async tests with pytest-asyncio"
+    why: >
+      RunRunner is async — you can't test it with plain pytest.
+      pytest-asyncio lets you write async test functions.
+      Add asyncio_mode = "auto" to pyproject.toml so you don't need
+      @pytest.mark.asyncio on every test.
+    detail: >
+      Add to pyproject.toml:
+        [tool.pytest.ini_options]
+        asyncio_mode = "auto"
+
+      Create tests/test_runner.py:
+
+        import pytest, time
+        from agentlog.models import Run
+        from agentlog.runner import RunRunner
+        from agentlog.storage import FileStorage
+
+        @pytest.fixture
+        def runner(tmp_path):
+            storage = FileStorage(data_dir=tmp_path / "data")
+            return RunRunner(storage)
+
+        async def test_execute_single_run(runner):
+            run = Run(run_id="r1", prompt="test")
+            result = await runner.execute(run)
+            assert result.status == "done"
+            assert "Processed" in result.result
+
+        async def test_execute_batch(runner):
+            runs = [Run(run_id=f"r{i}", prompt=f"prompt {i}") for i in range(5)]
+            results = await runner.execute_batch(runs)
+            assert len(results) == 5
+            assert all(r.status == "done" for r in results)
+
+        async def test_batch_is_faster_than_sequential(runner):
+            runs = [Run(run_id=f"r{i}", prompt=f"p{i}") for i in range(3)]
+            start = time.time()
+            await runner.execute_batch(runs)
+            elapsed = time.time() - start
+            # Each run sleeps 0.5s — concurrent should be ~0.5s not ~1.5s
+            assert elapsed < 1.2
+
+      pytest tests/ -v — all tests should pass.
 ```
 
 ---
@@ -297,13 +328,13 @@ steps:
 
 ```yaml
 done_when:
-  - You can write an async function, call it with await, and run it with asyncio.run()
-  - You can explain why calling async def without await gives a coroutine object
-  - asyncio.gather() with 3 tasks runs in ~1x time, not 3x — confirmed with timing
-  - RunRunner.execute_batch() works and tests pass
-  - You understand why time.sleep() inside async def is wrong
-  - pytest async tests run with @pytest.mark.asyncio
+  - You can write an async function, call it with await, run it with asyncio.run()
+  - You've seen the coroutine-object-without-await output and understand why it happens
+  - execute_batch() on 3 runs completes in ~0.5s not ~1.5s — confirmed with timing
+  - The blocking mistake exercise runs in ~3s; fixed version runs in ~1s
+  - All runner tests pass with pytest-asyncio
   - You can use async with httpx.AsyncClient() to make a real HTTP call
+  - You can explain why time.sleep() inside async def is wrong
 ```
 
 ---
@@ -314,14 +345,14 @@ done_when:
 if_you_know_csharp:
   async_def: "async Task<T> MethodAsync() — same semantics, different syntax"
   await: "await — identical keyword, identical purpose"
-  asyncio.run(): "Task.Run(() => ...).GetAwaiter().GetResult() at the top level"
+  asyncio.run(): "Task.Run().GetAwaiter().GetResult() at the top level"
   asyncio.gather(): "Task.WhenAll(task1, task2, task3) — runs all, returns all results"
   asyncio.create_task(): "Task.Run() — fires a task without waiting"
   async_with: "async using — identical concept"
   event_loop: >
-    C# uses a thread pool under Task.Run. Python's asyncio uses a single thread.
-    The key difference: blocking in C# only blocks one thread from the pool.
-    Blocking in Python asyncio blocks the ENTIRE program.
+    C# uses a thread pool under Task.Run — blocking one thread doesn't freeze others.
+    Python asyncio uses a single thread — blocking anywhere freezes everything.
+    This is the critical difference.
 ```
 
 ---
@@ -332,9 +363,9 @@ if_you_know_csharp:
 open_questions:
   - What is the difference between asyncio.gather() and asyncio.wait()?
     When would you use wait() instead?
-  - What happens if one of the coroutines in asyncio.gather() raises an exception?
-    Does gather() cancel the other coroutines?
+  - What happens if one coroutine in gather() raises an exception?
+    Does gather() cancel the others?
   - What is an asyncio.Queue and when would you use it instead of gather()?
-  - What is the difference between asyncio.run() and loop.run_until_complete()?
-    Why is asyncio.run() preferred in modern Python?
+  - What is asyncio.Semaphore and when would you need it?
+    (Hint: rate-limiting LLM API calls — you'll hit this in the agentic ramp)
 ```
