@@ -91,6 +91,7 @@ concepts:
 steps:
   1:
     task: "Write pyproject.toml"
+    feature: "agentlog — packaging: pyproject.toml with name, deps, entry point, and pytest config"
     why: >
       This is the package manifest. Everything pip needs to install agentlog
       correctly — name, version, Python version, dependencies, entry point.
@@ -133,6 +134,7 @@ steps:
 
   2:
     task: "Install the package in editable mode"
+    feature: "agentlog — packaging: pip install -e .[dev] — editable install so source changes are live immediately"
     why: >
       After this command, agentlog is a real installed package. You can import it
       from anywhere in the venv, and the agentlog terminal command exists.
@@ -149,6 +151,7 @@ steps:
 
   3:
     task: "Add __version__ to __init__.py"
+    feature: "agentlog — package metadata: __version__ string in __init__.py for CLI and tooling"
     why: >
       The CLI's agentlog version command needs to print this.
       The pyproject.toml version and __version__ should always match.
@@ -165,6 +168,7 @@ steps:
 
   4:
     task: "Write agentlog/cli.py — the entry point stub"
+    feature: "agentlog — cli.py: Typer app scaffold with agentlog version command and registered entry point"
     why: >
       The full CLI is built in Stage 08. Right now you just need the entry point
       to exist so the agentlog terminal command works. A single version command
@@ -193,6 +197,7 @@ steps:
 
   5:
     task: "Write README.md"
+    feature: "agentlog — documentation: README with install instructions and all CLI command signatures"
     why: >
       Every package published to PyPI needs a README. This one is minimal now —
       Stage 08 expands it when all commands are built.
@@ -227,6 +232,7 @@ steps:
 
   6:
     task: "Build the package"
+    feature: "agentlog — packaging: python -m build — produce .whl and .tar.gz distribution artifacts"
     why: >
       python -m build produces the actual artifacts that pip installs and PyPI hosts.
       Opening the .whl file shows you exactly what gets distributed — demystifies
@@ -245,6 +251,7 @@ steps:
 
   7:
     task: "Publish to TestPyPI (optional but do it once)"
+    feature: "agentlog — packaging: full publish cycle — TestPyPI upload and install from index"
     why: >
       Publishing to TestPyPI and then installing from it confirms the full cycle:
       pyproject.toml → build → upload → pip install → running tool.

@@ -39,6 +39,7 @@ There's one new thing in this stage: a **real LLM call**. The runner's `asyncio.
 steps:
   1:
     task: "Add Rich and wire the console"
+    feature: "agentlog — cli.py: Rich console setup with STATUS_COLORS map for all run states"
     why: >
       agentlog needs colored terminal output — green for done, red for failed,
       yellow for pending. Rich handles this with zero effort.
@@ -68,6 +69,7 @@ steps:
 
   2:
     task: "Build agentlog run"
+    feature: "agentlog — cli.py: `agentlog run` command — submit a prompt, execute via RunRunner, save and display result"
     why: >
       The primary command. Takes a prompt, creates a Run, executes it via RunRunner,
       saves it, prints the result. This is the full agentlog pipeline in one command.
@@ -113,6 +115,7 @@ steps:
 
   3:
     task: "Build agentlog list"
+    feature: "agentlog — cli.py: `agentlog list` command — Rich table of all runs with colored status and optional filter"
     why: >
       The most-used command. Lists all runs in a Rich table with colored status.
       Optional --status filter so you can see just what failed, or just what's pending.
@@ -159,6 +162,7 @@ steps:
 
   4:
     task: "Build agentlog get and agentlog clear"
+    feature: "agentlog — cli.py: `agentlog get` (run detail + token usage) and `agentlog clear` (with confirmation)"
     why: >
       get shows the full detail of one run — result, error, token usage.
       clear is the reset command — start fresh. Both need clean error handling:
@@ -211,6 +215,7 @@ steps:
 
   5:
     task: "Build agentlog config show and agentlog version"
+    feature: "agentlog — cli.py: `agentlog config show` (settings table) and `agentlog version` commands"
     why: >
       config show is for debugging — confirm the right API key and settings are loaded.
       version is for CI and users. Both are one-liners that round out the CLI.
@@ -250,6 +255,7 @@ steps:
 
   6:
     task: "Add global error handling"
+    feature: "agentlog — cli.py: top-level error handler — clean output for DevToolError, graceful KeyboardInterrupt"
     why: >
       Without this, any unhandled DevToolError prints a raw Python traceback.
       With it, the user sees a clean one-line error message.
@@ -275,6 +281,7 @@ steps:
 
   7:
     task: "Replace the simulated LLM call with a real OpenAI call"
+    feature: "agentlog — runner.py: live OpenAI API call replacing asyncio.sleep() placeholder — runner is now production-ready"
     why: >
       This is what everything has been building toward. The runner's asyncio.sleep()
       placeholder gets replaced with a real API call. The architecture doesn't change —
@@ -320,6 +327,7 @@ steps:
 
   8:
     task: "Write tests/test_cli.py"
+    feature: "agentlog — test suite: tests/test_cli.py — Typer CliRunner tests for all commands with mocked runner"
     why: >
       The CLI is the user-facing layer. Test it with Typer's CliRunner —
       invoke commands programmatically, assert on exit codes and output.
@@ -372,6 +380,7 @@ steps:
 
   9:
     task: "Full manual walkthrough"
+    feature: "agentlog — graduation test: all 6 commands working end-to-end from the terminal with real data"
     why: >
       Tests confirm correctness. This confirms the user experience.
       Do this after all tests pass — it's the graduation test.
