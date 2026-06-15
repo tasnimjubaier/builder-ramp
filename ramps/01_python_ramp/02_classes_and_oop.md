@@ -2,16 +2,24 @@
 
 **Status:** not started
 **Estimated time:** 2 days
-**Type:** additive — extend devtool/ from Stage 01
+**Type:** additive — extend agentlog/ from Stage 01
 **Depends on:** Stage 01 (project structure, imports working)
-
-Python OOP looks different from C#. No interfaces, no access modifiers enforced at runtime, no explicit getters/setters. But the concepts map directly — you just express them differently. This stage teaches Python classes the way they're actually used in frameworks like LangGraph, FastAPI, and Pydantic — not the textbook way.
 
 ---
 
-## What You're Building
+## The Story So Far
 
-Add a `devtool/models.py` with a set of classes that model a simple "run tracker" — something that tracks job runs with status, timing, and results. This is a realistic domain you'll reuse in later stages.
+You have a project skeleton. Now agentlog needs to actually represent something — the core entity it tracks: an **agent run**.
+
+A run has an ID, a prompt, a status, and eventually a result. It can be pending, running, done, or failed. You need to create one, update it, store multiple of them, and eventually print them cleanly. That's a data structure with behavior — a class.
+
+By the end of this stage, `agentlog/models.py` has three classes that work together: `Run`, `RunRegistry`, and `StreamingRun`. Every concept in this stage comes from a real need in the project, not from a concept list.
+
+---
+
+## Why this stage exists
+
+Python OOP looks different from C#. No interfaces, no access modifiers enforced at runtime, no explicit getters/setters. But the concepts map directly — you just express them differently. This stage teaches Python classes the way they're actually used in frameworks like LangGraph, FastAPI, and Pydantic — not the textbook way.
 
 ---
 
@@ -46,62 +54,59 @@ concepts:
     why: >
       Most data-holding classes in Python use @dataclass or Pydantic (Stage 03).
       Writing __init__ by hand is verbose and error-prone for simple data containers.
-    example: >
-      from dataclasses import dataclass, field
-
-      @dataclass
-      class Run:
-          id: str
-          status: str = "pending"
-          tags: list[str] = field(default_factory=list)
 
   Properties:
     what: >
       @property turns a method into a readable attribute.
       @x.setter adds a write side.
     csharp_equivalent: "public string Name { get; set; }"
-    python: >
-      @property
-      def display_name(self) -> str:
-          return self.name.upper()
+    why: >
+      A run's result and status are linked — setting a result should also update status.
+      A property setter enforces that coupling without exposing the internals.
 
   Dunder methods (magic methods):
     what: >
       Special methods with double underscores: __str__, __repr__, __eq__, __len__, __contains__
       Python calls these automatically in response to built-in operations.
     why: >
-      __repr__ is what you see when you print an object in the REPL — essential for debugging.
-      __eq__ controls == comparison — critical for test assertions.
-      __str__ controls str(obj) — what you display to users.
-      LangGraph's Message classes define these. Understanding them makes reading framework code easy.
+      __repr__ is what you see when you print a Run in the REPL — essential for debugging.
+      __eq__ controls == — critical for test assertions.
+      __len__ and __contains__ on RunRegistry make it feel like a native collection.
+      LangGraph's Message classes define all of these.
 
   Inheritance:
     what: >
-      class FailedRun(Run): — FailedRun gets all of Run's methods and attributes.
+      class StreamingRun(Run): — StreamingRun gets all of Run's methods and attributes.
       super().__init__(...) calls the parent constructor.
     why: >
-      Used for exception hierarchies (Stage 05), base classes in Pydantic and LangGraph.
-      Not overused in modern Python — composition is usually preferred — but you need to read it.
+      A streaming run IS a run — same ID, prompt, status — but it also accumulates
+      chunks as they arrive. Inheritance models that relationship directly.
+      You'll see this in Pydantic and LangGraph base classes.
 
   __slots__:
     what: >
       class Run: __slots__ = ["id", "status"] — restricts instance attributes to the named list.
-      Saves memory, prevents accidental attribute creation.
     why: >
-      You'll see this in performance-sensitive library code. Knowing it exists prevents confusion
-      when you try to add an attribute to a slotted class and get an AttributeError.
+      You'll see this in performance-sensitive library code. Knowing it exists prevents
+      confusion when you try to add an attribute to a slotted class and get AttributeError.
 ```
 
 ---
 
 ## Build Steps
 
+Each step builds on the previous. You're not learning features in isolation — you're building `models.py` piece by piece until it does everything agentlog needs.
+
 ```yaml
 steps:
   1:
-    task: "Write a plain class in models.py"
+    task: "Write a plain Run class"
+    why: >
+      agentlog tracks runs. A run has an ID, a prompt, a status, and eventually a result.
+      Start with the simplest version — a plain class with an __init__ and a __repr__
+      so you can print it cleanly while developing.
     detail: >
-      # devtool/models.py
+      # agentlog/models.py
 
       class Run:
           def __init__(self, run_id: str, prompt: str):
@@ -118,6 +123,23 @@ steps:
                   return NotImplemented
               return self.run_id == other.run_id
 
+      Test in main.py:
+        from agentlog.models import Run
+        r = Run("run-001", "hello world")
+        print(r)             # Run(id='run-001', status='pending')
+        r2 = Run("run-001", "different prompt")
+        print(r == r2)       # True — same run_id, __eq__ controls this
+
+  2:
+    task: "Add a property to link result and status"
+    why: >
+      When a run finishes, two things change together: the result gets set and the
+      status flips to "done". If those are separate assignments, callers can forget
+      one. A property setter enforces the coupling — set the result, status updates
+      automatically.
+    detail: >
+      Add to Run:
+
           @property
           def result(self) -> str | None:
               return self._result
@@ -131,18 +153,19 @@ steps:
               self.status = "failed"
               self._result = f"ERROR: {error}"
 
-      Test in main.py:
-        from devtool.models import Run
+      Test:
         r = Run("run-001", "hello world")
-        print(r)            # uses __repr__
-        r.result = "done!"  # uses setter, sets status to "done"
-        print(r)
+        r.result = "done!"   # setter fires — status becomes "done"
+        print(r)             # Run(id='run-001', status='done')
 
-  2:
-    task: "Convert to a dataclass"
+  3:
+    task: "Convert Run to a dataclass"
+    why: >
+      Run is a data-holding class. Writing self.x = x for every field is noise.
+      @dataclass generates __init__, __repr__, and __eq__ automatically.
+      Notice what disappears from your code — and what you get for free.
+      This is the pattern agentlog will use from Stage 03 onwards with Pydantic.
     detail: >
-      Rewrite Run as a dataclass. Notice what disappears:
-
       from dataclasses import dataclass, field
       from datetime import datetime
 
@@ -163,32 +186,48 @@ steps:
               self.status = "failed"
 
       Note: dataclass generates __repr__ and __eq__ automatically.
-      Print a Run instance — what does the repr look like?
-      Compare two Run instances with the same run_id — are they equal?
+      The hand-written __repr__ and __eq__ from step 1 are now gone — replaced for free.
 
-  3:
+      Test:
+        r1 = Run("r1", "prompt one")
+        r2 = Run("r1", "prompt two")
+        print(r1 == r2)   # True — dataclass __eq__ compares ALL fields by default
+        # Compare with your hand-written __eq__ — which behavior do you want?
+        # This is a real design decision you'll make in Stage 03 with Pydantic.
+
+  4:
     task: "Add a classmethod alternative constructor"
+    why: >
+      agentlog will eventually load runs from a JSON file. The data comes in as a dict,
+      not as keyword arguments. Run.from_dict(data) is the clean interface for that —
+      one call, handles all the field mapping. This is the alternative constructor pattern.
     detail: >
-      Add to the Run dataclass:
+      Add to Run:
 
-      @classmethod
-      def from_dict(cls, data: dict) -> "Run":
-          return cls(
-              run_id=data["run_id"],
-              prompt=data["prompt"],
-              status=data.get("status", "pending"),
-              result=data.get("result"),
-          )
+          @classmethod
+          def from_dict(cls, data: dict) -> "Run":
+              return cls(
+                  run_id=data["run_id"],
+                  prompt=data["prompt"],
+                  status=data.get("status", "pending"),
+                  result=data.get("result"),
+              )
 
       Test:
         r = Run.from_dict({"run_id": "abc", "prompt": "test"})
         print(r)
 
-      Note the "Run" string in the return type — forward reference. When a class
-      references itself in its own type hint, use a string to avoid circular definition.
+      The "Run" string in the return type is a forward reference — a class can't
+      reference itself in its own type hint until Python 3.12 with from __future__ import annotations.
+      Using a string avoids the circular definition. You'll see this in framework code constantly.
 
-  4:
-    task: "Build a RunRegistry class that holds multiple Runs"
+  5:
+    task: "Build RunRegistry to hold multiple runs"
+    why: >
+      agentlog needs to track more than one run at a time — list them, filter by status,
+      look one up by ID. A plain list won't do: you want O(1) lookup by ID and clean
+      iteration. RunRegistry wraps a dict and exposes exactly the interface agentlog needs.
+      The dunder methods make it feel like a native Python collection.
     detail: >
       class RunRegistry:
           def __init__(self) -> None:
@@ -221,10 +260,16 @@ steps:
         registry.add(Run("r2", "prompt two"))
         print(len(registry))        # 2 — uses __len__
         print("r1" in registry)     # True — uses __contains__
-        print(registry)             # uses __repr__
+        print(registry)             # RunRegistry(2 runs) — uses __repr__
+        print(registry.pending())   # both runs, status is "pending"
 
-  5:
-    task: "Add a subclass"
+  6:
+    task: "Add StreamingRun as a subclass"
+    why: >
+      Some LLM APIs stream responses — tokens arrive one at a time. A StreamingRun
+      IS a Run (same ID, prompt, status, registry behavior) but it also accumulates
+      chunks. Inheritance models this: StreamingRun gets everything Run has, and adds
+      chunk-handling on top. You don't duplicate Run's logic — you extend it.
     detail: >
       @dataclass
       class StreamingRun(Run):
@@ -232,21 +277,32 @@ steps:
 
           def add_chunk(self, chunk: str) -> None:
               self.chunk_count += 1
-              # append to result
               self.result = (self.result or "") + chunk
+              self.status = "streaming"
+
+          def finalize(self) -> None:
+              self.status = "done"
 
       Test:
         sr = StreamingRun("sr-001", "stream this")
         sr.add_chunk("Hello ")
         sr.add_chunk("world")
-        print(sr.result)        # "Hello world"
-        print(sr.chunk_count)   # 2
-        print(isinstance(sr, Run))  # True — it IS a Run
+        sr.finalize()
+        print(sr.result)             # "Hello world"
+        print(sr.chunk_count)        # 2
+        print(isinstance(sr, Run))   # True — it IS a Run
 
-  6:
-    task: "Update main.py to use the registry"
+        # Add it to the registry — it works because it's a Run
+        registry.add(sr)
+        print(len(registry))         # 3
+
+  7:
+    task: "Wire it all together in main.py"
+    why: >
+      Confirm the full model layer works as a system before moving to Stage 03.
+      This is the state of agentlog's data layer at the end of this stage.
     detail: >
-      from devtool.models import Run, RunRegistry, StreamingRun
+      from agentlog.models import Run, RunRegistry, StreamingRun
 
       registry = RunRegistry()
       registry.add(Run("r1", "first run"))
@@ -254,8 +310,12 @@ steps:
       registry.add(StreamingRun("r3", "streaming run"))
 
       registry.get("r1").mark_done("result one")
-      registry.get("r3").add_chunk("partial ")
-      registry.get("r3").add_chunk("result")
+      registry.get("r2").mark_failed("timeout")
+
+      sr = registry.get("r3")
+      sr.add_chunk("partial ")
+      sr.add_chunk("result")
+      sr.finalize()
 
       for run in registry.all():
           print(run)
@@ -268,13 +328,15 @@ steps:
 ```yaml
 deliberate_breaks:
   - Create two Run instances with the same run_id. Are they equal (==)?
-    Why — which method controls this?
+    Why — which method controls this? How does the dataclass __eq__ differ
+    from the hand-written one you wrote in step 1?
   - Forget self on a method definition. What error do you get?
-  - Try to add an attribute that isn't declared in a dataclass after creation.
-    Does it work? (It does — dataclasses don't enforce slots by default.)
-    Now add __slots__ = () to the dataclass and try again.
+  - Try adding a new attribute to a Run after creation — does it work?
+    Now add __slots__ = () to the dataclass and try again. What happens?
   - Call super().__init__() in StreamingRun without passing the required fields.
     What error? Fix it by passing them correctly.
+  - Add a StreamingRun to the registry, then call registry.pending().
+    Does it show up? Why or why not? Fix mark_done to use finalize() instead.
 ```
 
 ---
@@ -285,6 +347,7 @@ deliberate_breaks:
 done_when:
   - Run, RunRegistry, and StreamingRun all work as described
   - __repr__, __eq__, __len__, __contains__ all behave correctly
+  - registry.add(StreamingRun(...)) works because StreamingRun is a Run
   - You can add a new method to any class without looking up syntax
   - You can explain @property and why it exists vs a plain attribute
   - You understand @classmethod vs @staticmethod vs instance method
@@ -318,5 +381,8 @@ open_questions:
   - What is multiple inheritance in Python? When would you use it?
     (Hint: mixins — you'll see this in LangGraph's BaseCallbackHandler)
   - What does dataclass(frozen=True) do? When would you use it?
-  - What is the MRO (Method Resolution Order) and why does it matter for inheritance?
+  - What is the MRO (Method Resolution Order) and why does it matter?
+  - The dataclass __eq__ compares all fields. Your hand-written __eq__ compared only run_id.
+    Which is correct for agentlog? What are the tradeoffs? You'll make this decision
+    explicitly when you switch to Pydantic in Stage 03.
 ```
